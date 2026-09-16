@@ -245,10 +245,12 @@ V1 uses Telegram long polling, so no public webhook endpoint is required.
 When a user clicks an action button, the service:
 
 1. receives the Telegram `callback_query`;
-2. attempts `answerCallbackQuery` immediately;
+2. immediately calls `answerCallbackQuery` with `Selection received.`;
 3. builds a generic callback event;
 4. forwards it to `CALLBACK_FORWARD_URL` when configured;
 5. otherwise logs the event and finishes.
+
+The acknowledgement only confirms that this service received the click. It does not mean that an upstream AI or task runner has completed the selected action.
 
 Example event:
 
@@ -278,6 +280,23 @@ Telegram action -> callback event -> CALLBACK_FORWARD_URL
 ```
 
 A future AI service only needs to produce the generic message request and/or accept the generic callback event.
+
+### AI decision feedback
+
+An upstream AI service can send decision options using ordinary action buttons. The action should contain a short upstream task identifier, for example `task123:choose_a`.
+
+After the user clicks an option, this service immediately displays `Selection received.` and forwards the generic callback event. The upstream service uses the action to restore its own task context and process the decision.
+
+When processing finishes, the upstream service reports the result by calling the existing message endpoint again, using the `chat_id` from the callback event:
+
+```json
+{
+  "chat_id": 123456789,
+  "text": "Solution A completed successfully."
+}
+```
+
+This repository does not call an AI model, store AI task state, or wait synchronously for AI execution.
 
 ## Validation rules
 
