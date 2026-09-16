@@ -72,10 +72,19 @@ class TelegramClient:
         except Exception as exc:
             logger.error("Telegram client shutdown failed (%s)", type(exc).__name__)
 
-    async def answer_callback_query(self, callback_query_id: str) -> None:
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        *,
+        text: str | None = None,
+    ) -> None:
         """Acknowledge a Telegram inline-button callback."""
+        kwargs: dict[str, str] = {"callback_query_id": callback_query_id}
+        if text is not None:
+            kwargs["text"] = text
+
         try:
-            await self.bot.answer_callback_query(callback_query_id=callback_query_id)
+            await self.bot.answer_callback_query(**kwargs)
         except Exception as exc:
             logger.error("Telegram callback acknowledgement failed (%s)", type(exc).__name__)
             raise TelegramCallbackError("Telegram callback acknowledgement failed") from None

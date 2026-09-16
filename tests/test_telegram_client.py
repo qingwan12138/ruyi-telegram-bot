@@ -84,6 +84,31 @@ def test_keyboard_uses_at_most_two_buttons_per_row() -> None:
 
 
 @pytest.mark.asyncio
+async def test_answer_callback_query_passes_feedback_text() -> None:
+    class CallbackBot:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        async def answer_callback_query(self, **kwargs) -> None:
+            self.calls.append(kwargs)
+
+    bot = CallbackBot()
+    client = TelegramClient(Settings(telegram_token="x"), bot=bot)
+
+    await client.answer_callback_query(
+        "callback-1",
+        text="Selection received.",
+    )
+
+    assert bot.calls == [
+        {
+            "callback_query_id": "callback-1",
+            "text": "Selection received.",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_send_error_log_does_not_echo_token(caplog) -> None:
     class SecretLeakingBot:
         async def send_message(self, **kwargs):
