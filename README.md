@@ -1,102 +1,81 @@
-# ruyi-telegram-bot-python
+# ruyi-telegram-bot
 
-An independent Telegram notification and human-interaction service split from `ruyisdk-test/riko-bot`.
+An independent Telegram notification and human-interaction transport split
+from [`ruyisdk-test/riko-bot`](https://github.com/ruyisdk-test/riko-bot).
 
-The service is intentionally small. Upstream systems decide **what is important enough to notify**; this repository only accepts a generic message, sends it to Telegram, receives action-button callbacks, and can forward those callbacks to another HTTP service.
+The service accepts generic HTTP/JSON message requests, renders Telegram
+messages and buttons, receives human selections, routes the resulting event to
+a configured workflow, and reports callback delivery status to the Telegram
+user. It does not interpret the business meaning of an option.
 
-## Why this repository exists
+## Architecture
 
-The original `riko-bot` contains package/version checks, Manifest generation, PR creation, scheduling, persistence, Telegram integration, and other Ruyi packaging logic. The Telegram path has already proven that FastAPI -> Telegram API -> Telegram message works, but the Telegram responsibility is now being split into its own service.
-
-This repository keeps the useful Telegram integration ideas while removing Riko-specific business coupling.
-
-## Responsibilities
-
-This service is responsible for:
-
-- `GET /health` and `GET /version`;
-- receiving generic notification text over HTTP;
-- sending plain-text Telegram messages;
-- using a configured default chat ID or a request-specific override;
-- rendering URL buttons;
-- rendering action/decision buttons;
-- receiving Telegram `callback_query` updates through long polling;
-- acknowledging callbacks with `answerCallbackQuery`;
-- optionally forwarding a generic callback event to `CALLBACK_FORWARD_URL`.
-
-It is **not** responsible for:
-
-- package or version checks;
-- deciding which failures are important;
-- polling `ruyi-index-test-bot` failures;
-- Manifest generation;
-- nvchecker;
-- PR or Issue creation;
-- package categories, combos, policies, or version enrichment;
-- scheduler logic;
-- database/cache/Redis/Valkey/Celery/message queues;
-- AI/LLM inference.
-
-The AI/upstream service is expected to decide what to tell a human. Raw batches of test failures should not be pushed directly by this service.
-
-## System relationship
+The original Riko responsibilities are being separated into three services:
 
 ```text
-+---------------------+
-| ruyi-index-test-bot |
-+----------+----------+
-           |
-           | test / package data
-           v
-+---------------------+
-| AI / processor      |
-| (separate project)  |
-+----------+----------+
-           |
-           | important result / decision request
-           v
-+---------------------+
-| ruyi-telegram-bot   |
-|  Python + FastAPI   |
-+----------+----------+
-           |
-           v
-       Telegram
-           |
-           | action button
-           v
-+---------------------+
-| callback forwarding |
-+----------+----------+
-           |
-           v
-      AI / upstream
+original riko-bot
+   |
+   +-- test-bot          test / detection / queries
+   +-- package/PR bot    packaging / changes / pull requests
+   +-- telegram-bot      notifications / human interaction / result routing
 ```
 
-`ruyi-telegram-bot-python` does not import Python or Go packages from `riko-bot` or `ruyi-index-test-bot`. Services communicate through HTTP/JSON boundaries.
+AI is a horizontal capability that may participate in any of those workflows.
+It is not a fixed central upstream, callback consumer, or router.
 
-## Requirements
+```text
+workflow/service
+    | Human Interaction Request
+    v
+ruyi-telegram-bot -> Telegram -> human selection
+    |
+    | Human Interaction Result
+    v
+configured consuming workflow
+```
 
-- Python >= 3.10
+The request producer, option producer, human decision-maker, and result
+consumer may all be different. `callback_target` therefore identifies the
+result consumer; it does not identify or default to the requester.
+
+Services communicate through HTTP/JSON. This repository does not import test,
+package, Manifest, nvchecker, or PR business code from the other repositories.
+
+## Responsibilities and boundaries
+
+This service provides:
+
+- `GET /health` and `GET /version`;
+- `POST /api/v1/messages` for plain text and optional buttons;
+- default or per-request Telegram chat IDs;
+- HTTP(S) URL buttons;
+- dynamic zero-to-N action options, rendered at up to two per row;
+- Telegram callback polling and immediate callback acknowledgement;
+- logical callback-target routing through controlled configuration;
+- legacy single-consumer callback forwarding;
+- received, delivered, and failed transport feedback.
+
+It does not provide package/test/PR decisions, AI reasoning, model clients,
+workflow task state, option semantics, context restoration, a database, Redis,
+a message queue, durable retries, a scheduler, API authentication, or a
+free-text Telegram state machine.
+
+The consuming workflow owns all package, failure, patch, PR, prompt, reasoning,
+and task context. It restores that context using `interaction_id`.
+
+## Requirements and installation
+
+- Python 3.10 or newer (Python 3.12 is recommended)
 - Poetry
-- FastAPI
-- Uvicorn
-- `python-telegram-bot`
-- httpx
-
-## Install
+- FastAPI, httpx, Pydantic, and `python-telegram-bot`
 
 ```bash
 poetry install
-```
-
-Copy the example environment file and fill in your own values:
-
-```bash
 cp .env.example .env
 ```
 
-Never commit a real Telegram token or chat ID.
+Never commit a real Telegram token, chat ID, proxy credential, or credential-
+bearing callback endpoint.
 
 ## Configuration
 
@@ -107,37 +86,48 @@ APP_PORT=9878
 TELEGRAM_TOKEN=
 TELEGRAM_CHAT_ID=
 
+CALLBACK_TARGETS_JSON={"test-workflow":"http://127.0.0.1:9877/callback","package-pr-workflow":"http://127.0.0.1:9880/callback"}
 CALLBACK_FORWARD_URL=
 
 HTTP_PROXY=
 HTTPS_PROXY=
 ```
 
-`TELEGRAM_TOKEN` is required at service startup.
+`TELEGRAM_TOKEN` is required at startup. `TELEGRAM_CHAT_ID` is optional when
+every message request supplies `chat_id`.
 
-`TELEGRAM_CHAT_ID` is optional. If it is empty, each `POST /api/v1/messages` request must provide `chat_id`.
+`CALLBACK_TARGETS_JSON` is an optional JSON object mapping logical target names
+to controlled HTTP(S) endpoints. It is parsed at startup; malformed JSON,
+blank target names, non-string values, and non-HTTP(S) endpoints fail early.
+Callers submit only a logical `callback_target`, never an arbitrary callback
+URL. Adding a target changes configuration, not callback-routing code.
 
-`HTTPS_PROXY` is preferred for Telegram HTTPS traffic, with `HTTP_PROXY` as a fallback. Proxy URLs and the Telegram token are never logged by this service.
+`CALLBACK_FORWARD_URL` is the legacy/default single-consumer route:
 
-`CALLBACK_FORWARD_URL` is optional. When it is empty, action callbacks are acknowledged and logged but are not sent anywhere else.
+- a new interaction with an explicit target uses only the registry;
+- an unknown explicit target is an error and never falls back;
+- a new interaction without a target uses `CALLBACK_FORWARD_URL`;
+- a legacy `action` uses `CALLBACK_FORWARD_URL`;
+- an action-button request without any usable route returns HTTP 422 before a
+  Telegram message is sent.
 
-The default listen address is `127.0.0.1:9878`, avoiding the local ports currently used by the independently split test service. Host and port are configurable.
+`HTTPS_PROXY` is preferred for Telegram HTTPS traffic, with `HTTP_PROXY` as a
+fallback. Existing environment proxy behavior is otherwise unchanged.
+
+The service listens on `127.0.0.1:9878` by default. Bind another address only
+when the deployment requires it.
 
 ## Run
-
-Using the configured `APP_HOST` and `APP_PORT`:
 
 ```bash
 poetry run python -m telegram_bot
 ```
 
-Or run Uvicorn directly with the documented default address:
+or:
 
 ```bash
-poetry run python -m uvicorn telegram_bot.main:app --host 127.0.0.1 --port 9878 --reload
+poetry run python -m uvicorn telegram_bot.main:app --host 127.0.0.1 --port 9878
 ```
-
-For container or remote access, explicitly configure/bind `0.0.0.0` only when needed.
 
 ## Health and version
 
@@ -145,8 +135,6 @@ For container or remote access, explicitly configure/bind `0.0.0.0` only when ne
 curl http://127.0.0.1:9878/health
 curl http://127.0.0.1:9878/version
 ```
-
-Expected responses:
 
 ```json
 {"status":"ok"}
@@ -156,14 +144,23 @@ Expected responses:
 {"version":"0.1.0"}
 ```
 
-## Send a plain-text message
+## Message API
 
-```bash
-curl -X POST http://127.0.0.1:9878/api/v1/messages \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "Telegram service smoke test"
-  }'
+### Plain text
+
+```json
+{
+  "text": "Telegram service smoke test"
+}
+```
+
+A request-specific `chat_id` overrides `TELEGRAM_CHAT_ID`:
+
+```json
+{
+  "text": "Send to another chat",
+  "chat_id": 123456789
+}
 ```
 
 Successful response:
@@ -176,88 +173,60 @@ Successful response:
 }
 ```
 
-A request-specific `chat_id` overrides `TELEGRAM_CHAT_ID`:
+Telegram send failures return HTTP 503 with a sanitized error.
 
-```bash
-curl -X POST http://127.0.0.1:9878/api/v1/messages \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "Send to another configured target",
-    "chat_id": 123456789
-  }'
-```
+### URL buttons
 
-If Telegram delivery fails, the API returns HTTP `503` with:
-
-```json
-{"detail":"Telegram notification failed"}
-```
-
-## URL button
-
-```bash
-curl -X POST http://127.0.0.1:9878/api/v1/messages \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "AI created a pull request.",
-    "buttons": [
-      {
-        "type": "url",
-        "text": "View PR",
-        "url": "https://github.com/ruyisdk-test/riko-bot"
-      }
-    ]
-  }'
-```
-
-V1 URL buttons only accept `http://` or `https://` URLs.
-
-## Action/decision buttons
-
-```bash
-curl -X POST http://127.0.0.1:9878/api/v1/messages \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "AI requires a decision.",
-    "buttons": [
-      {
-        "type": "action",
-        "text": "Solution A",
-        "action": "demo:solution_a"
-      },
-      {
-        "type": "action",
-        "text": "Solution B",
-        "action": "demo:solution_b"
-      }
-    ]
-  }'
-```
-
-`action` becomes Telegram `callback_data` and is limited to 64 UTF-8 bytes. Keep it short and use an upstream-generated task identifier, for example `task123:solution_a`. Do not place large JSON payloads in callback data.
-
-Buttons are rendered at up to two buttons per row.
-
-## Callback handling
-
-V1 uses Telegram long polling, so no public webhook endpoint is required.
-
-When a user clicks an action button, the service:
-
-1. receives the Telegram `callback_query`;
-2. immediately calls `answerCallbackQuery` with `Selection received.`;
-3. builds a generic callback event;
-4. forwards it to `CALLBACK_FORWARD_URL` when configured;
-5. otherwise logs the event and finishes.
-
-The acknowledgement only confirms that this service received the click. It does not mean that an upstream AI or task runner has completed the selected action.
-
-Example event:
+URL-only messages need no interaction fields:
 
 ```json
 {
-  "event": "telegram.action",
-  "action": "task123:solution_a",
+  "text": "PR created",
+  "buttons": [
+    {
+      "type": "url",
+      "text": "View PR",
+      "url": "https://github.com/qingwan12138/ruyi-telegram-bot"
+    }
+  ]
+}
+```
+
+URL buttons accept only `http://` and `https://`, and reject `option_id` and
+legacy `action` fields.
+
+### Human interaction
+
+New action options require `interaction_id` and use `option_id`. The option
+count is dynamic; “Manual review” is just another option with no special logic.
+
+```json
+{
+  "text": "Choose an action",
+  "interaction_id": "decision-789",
+  "callback_target": "package-pr-workflow",
+  "buttons": [
+    {
+      "type": "action",
+      "text": "Retry",
+      "option_id": "retry"
+    },
+    {
+      "type": "action",
+      "text": "Manual review",
+      "option_id": "manual"
+    }
+  ]
+}
+```
+
+Example result delivered to the configured consuming workflow:
+
+```json
+{
+  "event": "telegram.interaction.selected",
+  "interaction_id": "decision-789",
+  "option_id": "manual",
   "chat_id": 123456789,
   "message_id": 456,
   "user_id": 789,
@@ -266,71 +235,111 @@ Example event:
 }
 ```
 
-A forwarding failure is logged and does not terminate the Telegram polling loop. V1 intentionally has no durable retry queue.
+The Telegram service transports only the interaction ID, option ID, logical
+routing key, and Telegram metadata. It never tries to understand what `manual`
+or another option means.
 
-## AI boundary
+## Callback data protocol
 
-AI is not implemented in this repository and this service does not guess an AI-specific request format.
-
-The stable V1 boundary is:
+New buttons use a stateless short encoding:
 
 ```text
-upstream -> POST /api/v1/messages -> Telegram
-Telegram action -> callback event -> CALLBACK_FORWARD_URL
+h1|<target-character-count>|<interaction-character-count>|<target><interaction><option>
 ```
 
-A future AI service only needs to produce the generic message request and/or accept the generic callback event.
+Length prefixes are Unicode character counts. The complete encoded value is
+limited separately to 64 UTF-8 bytes, including the prefix and lengths. A new
+interaction using `CALLBACK_FORWARD_URL` encodes a target length of zero.
 
-### AI decision feedback
+The decoder safely rejects malformed prefixes, lengths, bounds, empty
+interaction/option IDs, and payloads over the byte limit. `h1|` is reserved;
+legacy actions may not begin with it. No in-memory callback map is used, so a
+service restart does not discard routing context.
 
-An upstream AI service can send decision options using ordinary action buttons. The action should contain a short upstream task identifier, for example `task123:choose_a`.
+## Callback feedback
 
-After the user clicks an option, this service immediately displays `Selection received.` and forwards the generic callback event. The upstream service uses the action to restore its own task context and process the decision.
+Long polling is used; no public Telegram webhook is required.
 
-When processing finishes, the upstream service reports the result by calling the existing message endpoint again, using the `chat_id` from the callback event:
+1. Telegram click received: `answerCallbackQuery` displays
+   `Selection received.`
+2. Result accepted by the target HTTP endpoint: the user receives
+   `Selection delivered successfully.`
+3. Unknown target, malformed data, timeout, network error, 4xx, or 5xx: the user
+   receives `Failed to deliver your selection.`
+
+“Received” means Telegram delivered the click to this service. “Delivered”
+means the target workflow accepted the HTTP result. Neither message means the
+business workflow, AI, test, package update, or PR completed successfully.
+After real business completion, that workflow may call
+`POST /api/v1/messages` again with its own result message.
+
+Acknowledgement, forwarding, and feedback-send failures are isolated so the
+polling loop continues. There is intentionally no durable retry queue.
+
+## Legacy action compatibility
+
+Existing callers may continue using an opaque `action` button when
+`CALLBACK_FORWARD_URL` is configured:
 
 ```json
 {
-  "chat_id": 123456789,
-  "text": "Solution A completed successfully."
+  "text": "Legacy decision",
+  "buttons": [
+    {
+      "type": "action",
+      "text": "Continue",
+      "action": "task123:continue"
+    }
+  ]
 }
 ```
 
-This repository does not call an AI model, store AI task state, or wait synchronously for AI execution.
+The delivered event remains:
 
-## Validation rules
+```json
+{
+  "event": "telegram.action",
+  "action": "task123:continue",
+  "chat_id": 123456789,
+  "message_id": 456,
+  "user_id": 789,
+  "username": "example",
+  "callback_query_id": "xxxx"
+}
+```
 
-- message `text` is trimmed, required, and limited to 4096 characters;
-- URL button requires `url` and forbids `action`;
-- action button requires `action` and forbids `url`;
-- URL button accepts only `http://` and `https://`;
-- action callback data is limited to 64 UTF-8 bytes;
-- unknown request/model fields are rejected;
-- Telegram messages are sent as plain text; V1 does not force Markdown/HTML parse modes.
+Legacy and new action buttons cannot be mixed in one request. The intentional
+contract change is that legacy actions without `CALLBACK_FORWARD_URL` are now
+rejected instead of creating buttons that only log selections.
+
+## Validation and safety
+
+- request and model objects reject unknown fields;
+- message and identifier strings are trimmed and may not be blank;
+- interaction fields are accepted only with new action options;
+- callback target existence is checked by the route/service layer against the
+  runtime registry, not by the pure Pydantic models;
+- callback endpoint URLs, query tokens, Telegram tokens, proxy credentials,
+  and exception details are not emitted to logs or user feedback;
+- malformed callbacks and delivery failures do not terminate polling.
 
 ## Tests
 
-Unit tests never require a real Telegram account. Telegram and upstream HTTP behavior are mocked/faked.
-
 ```bash
 poetry run pytest -q
+python -m compileall telegram_bot tests
 ```
 
-Coverage includes model validation, API routes, default and overridden chat IDs, button rendering, callback parsing/acknowledgement, callback forwarding, forwarding failures, long-poll recovery, and FastAPI lifespan startup/shutdown.
+Unit tests use fakes and `httpx.MockTransport`; they do not require a real
+Telegram account. Real smoke tests are run only when usable local
+`TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` values are present.
 
-### Manual Telegram smoke tests
+## Relationship to the original Telegram implementation
 
-With a real bot token/chat ID, manually verify:
+The project retains the proven environment token/chat configuration,
+proxy-aware `python-telegram-bot` client, FastAPI message endpoint, URL buttons,
+inline keyboard layout, long polling, safe error logging, and Telegram 503
+behavior from the original Riko implementation.
 
-- Test A: plain text message;
-- Test B: URL button opens the target page;
-- Test C: action button is received and logged;
-- Test D: action callback reaches a local mock HTTP receiver configured by `CALLBACK_FORWARD_URL`.
-
-Do not place real secrets in test fixtures, `.env.example`, commits, issues, or logs.
-
-## Relationship to the original Riko Telegram code
-
-The implementation retains the proven integration concepts from `riko-bot`: environment-based token/chat configuration, proxy-aware `python-telegram-bot`, HTTP-triggered message sending, error logging, and 503 behavior for Telegram delivery failure.
-
-It deliberately does not carry over `PackageReportData`, `PackageReportService`, package/version enrichment, Manifest/PR status fields, scheduler/database behavior, or old package-report formatting. The V1 public contract is generic text plus optional buttons.
+It deliberately does not restore `PackageReportData`, `PackageReportService`,
+package enrichment, Manifest/PR fields, scheduler behavior, or persistence.

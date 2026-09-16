@@ -1,5 +1,10 @@
 # AI Decision Callback Feedback Design
 
+> Historical completed design: this document records the earlier single-
+> consumer callback stage. The current generic multi-workflow architecture is
+> defined in `2026-09-16-human-interaction-routing-design.md`; AI is a
+> horizontal workflow capability, not a fixed upstream or central router.
+
 ## Scope
 
 This change improves the user feedback for generic AI decision callbacks without adding AI inference or AI-specific APIs to this repository.

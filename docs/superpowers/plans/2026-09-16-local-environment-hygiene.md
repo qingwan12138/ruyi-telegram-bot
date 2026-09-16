@@ -1,5 +1,8 @@
 # Local Environment Hygiene Implementation Plan
 
+> Completed historical plan. The checkboxes below record work already present
+> on `main`; they are not pending tasks.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Protect common local secret and tooling files while keeping the repository's template, lock file, tests, and documentation trackable.
@@ -28,7 +31,7 @@
 - Consumes: Git's ignore-pattern semantics and the variables loaded by `telegram_bot.config.Settings`.
 - Produces: safe local-file exclusions and a documented environment template with the same variable names and values.
 
-- [ ] **Step 1: Record the failing ignore-rule baseline**
+- [x] **Step 1: Record the failing ignore-rule baseline**
 
 Run:
 
@@ -41,7 +44,7 @@ Run:
 
 Expected: every listed path reports `NOT IGNORED`, proving the protection is currently absent.
 
-- [ ] **Step 2: Replace `.gitignore` with the approved grouped rules**
+- [x] **Step 2: Replace `.gitignore` with the approved grouped rules**
 
 Set `.gitignore` to:
 
@@ -82,7 +85,7 @@ build/
 Thumbs.db
 ```
 
-- [ ] **Step 3: Add precise comments to `.env.example`**
+- [x] **Step 3: Add precise comments to `.env.example`**
 
 Set `.env.example` to:
 
@@ -107,7 +110,7 @@ HTTP_PROXY=
 HTTPS_PROXY=
 ```
 
-- [ ] **Step 4: Verify the new positive ignore behavior**
+- [x] **Step 4: Verify the new positive ignore behavior**
 
 Run:
 
@@ -120,7 +123,7 @@ Run:
 
 Expected: exit code 0 and no exception.
 
-- [ ] **Step 5: Verify important repository artifacts remain trackable**
+- [x] **Step 5: Verify important repository artifacts remain trackable**
 
 Run:
 
@@ -133,7 +136,7 @@ Run:
 
 Expected: exit code 0 and no exception from the wrapper; none of the four paths is ignored.
 
-- [ ] **Step 6: Run repository validation**
+- [x] **Step 6: Run repository validation**
 
 Run:
 
@@ -145,7 +148,7 @@ git diff --check
 
 Expected: the lock file is valid, all tests pass with the actual reported count, and no whitespace errors are reported.
 
-- [ ] **Step 7: Commit the configuration change**
+- [x] **Step 7: Commit the configuration change**
 
 ```powershell
 git add .gitignore .env.example

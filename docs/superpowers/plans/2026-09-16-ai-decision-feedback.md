@@ -1,5 +1,9 @@
 # AI Decision Callback Feedback Implementation Plan
 
+> Historical completed plan: this implemented the earlier single-consumer
+> acknowledgement stage. It is retained as execution history, not as the
+> current architecture. See `2026-09-16-human-interaction-routing.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Show an immediate generic `Selection received.` Telegram acknowledgement for AI decision button clicks while preserving generic asynchronous callback forwarding and documenting how the upstream AI later reports its result.
@@ -38,7 +42,7 @@
 - Consumes: `TelegramClient` initialized with a `telegram.Bot`-compatible object.
 - Produces: `TelegramClient.answer_callback_query(callback_query_id: str, *, text: str | None = None) -> None`.
 
-- [ ] **Step 1: Write the failing transport test**
+- [x] **Step 1: Write the failing transport test**
 
 Add this test to `tests/test_telegram_client.py`:
 
@@ -68,7 +72,7 @@ async def test_answer_callback_query_passes_feedback_text() -> None:
     ]
 ```
 
-- [ ] **Step 2: Run the new test and verify the signature fails**
+- [x] **Step 2: Run the new test and verify the signature fails**
 
 Run:
 
@@ -78,7 +82,7 @@ poetry run pytest tests/test_telegram_client.py::test_answer_callback_query_pass
 
 Expected: FAIL with `TypeError` because `answer_callback_query` does not yet accept `text`.
 
-- [ ] **Step 3: Implement the minimal optional-text transport**
+- [x] **Step 3: Implement the minimal optional-text transport**
 
 Replace `TelegramClient.answer_callback_query` in `telegram_bot/telegram_client.py` with:
 
@@ -101,7 +105,7 @@ async def answer_callback_query(
         raise TelegramCallbackError("Telegram callback acknowledgement failed") from None
 ```
 
-- [ ] **Step 4: Run the focused Telegram client tests**
+- [x] **Step 4: Run the focused Telegram client tests**
 
 Run:
 
@@ -111,7 +115,7 @@ poetry run pytest tests/test_telegram_client.py -q
 
 Expected: all tests in `tests/test_telegram_client.py` pass.
 
-- [ ] **Step 5: Commit the transport change**
+- [x] **Step 5: Commit the transport change**
 
 ```bash
 git add telegram_bot/telegram_client.py tests/test_telegram_client.py
@@ -128,7 +132,7 @@ git commit -m "feat: support callback acknowledgement text"
 - Consumes: `TelegramClient.answer_callback_query(callback_query_id: str, *, text: str | None = None)` from Task 1.
 - Produces: module constant `CALLBACK_ACK_TEXT = "Selection received."` and callback handling that supplies it before parsing or forwarding.
 
-- [ ] **Step 1: Extend the callback fake to capture acknowledgement text**
+- [x] **Step 1: Extend the callback fake to capture acknowledgement text**
 
 Update `FakeTelegramClient` in `tests/test_callbacks.py` to preserve the existing ID assertions and separately capture text:
 
@@ -159,7 +163,7 @@ class FakeTelegramClient:
             raise self.answer_error
 ```
 
-- [ ] **Step 2: Write failing tests for feedback, ordering, and malformed callbacks**
+- [x] **Step 2: Write failing tests for feedback, ordering, and malformed callbacks**
 
 In `test_callback_is_answered_and_parsed_without_forward_url`, add:
 
@@ -223,7 +227,7 @@ async def test_incomplete_callback_is_acknowledged_but_not_forwarded() -> None:
     assert forwarded is False
 ```
 
-- [ ] **Step 3: Run the callback tests and verify the feedback assertions fail**
+- [x] **Step 3: Run the callback tests and verify the feedback assertions fail**
 
 Run:
 
@@ -233,7 +237,7 @@ poetry run pytest tests/test_callbacks.py -q
 
 Expected: feedback assertions fail because `CallbackService` currently calls the client without text.
 
-- [ ] **Step 4: Implement the fixed generic acknowledgement**
+- [x] **Step 4: Implement the fixed generic acknowledgement**
 
 Add this constant below the logger in `telegram_bot/callback_service.py`:
 
@@ -252,7 +256,7 @@ await self.telegram_client.answer_callback_query(
 
 Do not move this call below callback parsing or forwarding.
 
-- [ ] **Step 5: Run the complete callback tests**
+- [x] **Step 5: Run the complete callback tests**
 
 Run:
 
@@ -262,7 +266,7 @@ poetry run pytest tests/test_callbacks.py -q
 
 Expected: all callback tests pass, including existing acknowledgement-failure and forwarding-failure coverage.
 
-- [ ] **Step 6: Commit the callback-service change**
+- [x] **Step 6: Commit the callback-service change**
 
 ```bash
 git add telegram_bot/callback_service.py tests/test_callbacks.py
@@ -278,7 +282,7 @@ git commit -m "feat: acknowledge AI decision selections"
 - Consumes: unchanged `POST /api/v1/messages` and `CallbackEvent` contracts.
 - Produces: user-facing documentation distinguishing immediate receipt from later upstream completion.
 
-- [ ] **Step 1: Update callback acknowledgement documentation**
+- [x] **Step 1: Update callback acknowledgement documentation**
 
 In the callback-handling sequence, describe the first step as:
 
@@ -296,7 +300,7 @@ Add this clarification immediately after the sequence:
 The acknowledgement only confirms that this service received the click. It does not mean that an upstream AI or task runner has completed the selected action.
 ```
 
-- [ ] **Step 2: Add an AI decision feedback example**
+- [x] **Step 2: Add an AI decision feedback example**
 
 Add a subsection under `## AI boundary` containing:
 
@@ -319,7 +323,7 @@ When processing finishes, the upstream service reports the result by calling the
 This repository does not call an AI model, store AI task state, or wait synchronously for AI execution.
 ````
 
-- [ ] **Step 3: Check documentation terminology and formatting**
+- [x] **Step 3: Check documentation terminology and formatting**
 
 Run:
 
@@ -329,7 +333,7 @@ rg -n "Selection received|AI decision feedback|synchronously" README.md
 
 Expected: matches appear in callback handling and the AI decision subsection, and no statement implies that acknowledgement means execution success.
 
-- [ ] **Step 4: Commit the documentation change**
+- [x] **Step 4: Commit the documentation change**
 
 ```bash
 git add README.md
@@ -345,7 +349,7 @@ git commit -m "docs: explain asynchronous AI decision feedback"
 - Consumes: all changes from Tasks 1-3.
 - Produces: evidence that the repository remains syntactically valid, tests pass, contracts remain generic, and no secret was added.
 
-- [ ] **Step 1: Run the full automated test suite**
+- [x] **Step 1: Run the full automated test suite**
 
 Run:
 
@@ -355,7 +359,7 @@ poetry run pytest -q
 
 Expected: all tests pass with the exact count reported from the command; do not predict or invent the count.
 
-- [ ] **Step 2: Compile source and tests**
+- [x] **Step 2: Compile source and tests**
 
 Run:
 
@@ -365,7 +369,7 @@ poetry run python -m compileall -q telegram_bot tests
 
 Expected: exit code 0 with no syntax errors.
 
-- [ ] **Step 3: Check that no AI-specific coupling was introduced**
+- [x] **Step 3: Check that no AI-specific coupling was introduced**
 
 Run:
 
@@ -375,7 +379,7 @@ rg -n "OpenAI|Claude|API_KEY|/ai|/agent|PackageReport|Manifest|Redis|Valkey|Cele
 
 Expected: no new AI client, business model, database, queue, or AI-specific endpoint references.
 
-- [ ] **Step 4: Check for accidental secrets and diff problems**
+- [x] **Step 4: Check for accidental secrets and diff problems**
 
 Run:
 
@@ -386,7 +390,7 @@ git status --short
 
 Expected: no whitespace errors; only the intended implementation and documentation state is present.
 
-- [ ] **Step 5: Perform final review against the design**
+- [x] **Step 5: Perform final review against the design**
 
 Confirm all of the following from the code and test output:
 
