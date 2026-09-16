@@ -45,3 +45,38 @@ async def test_polling_recovers_from_network_error(monkeypatch) -> None:
 
     assert bot.calls == 3
     assert handled == ["callback-41"]
+
+
+@pytest.mark.asyncio
+async def test_polling_continues_after_callback_handler_failure() -> None:
+    class TwoUpdateBot:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def get_updates(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return [
+                    SimpleNamespace(
+                        update_id=1,
+                        callback_query=SimpleNamespace(id="first"),
+                    ),
+                    SimpleNamespace(
+                        update_id=2,
+                        callback_query=SimpleNamespace(id="second"),
+                    ),
+                ]
+            raise asyncio.CancelledError
+
+    handled: list[str] = []
+
+    async def handler(query) -> None:
+        handled.append(query.id)
+        if query.id == "first":
+            raise RuntimeError("delivery failed")
+
+    client = TelegramClient(Settings(telegram_token="x"), bot=TwoUpdateBot())
+    with pytest.raises(asyncio.CancelledError):
+        await client.poll_callbacks(handler)
+
+    assert handled == ["first", "second"]
