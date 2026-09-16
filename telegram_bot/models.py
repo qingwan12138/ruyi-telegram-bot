@@ -111,6 +111,9 @@ class MessageRequest(BaseModel):
         if new_actions:
             if self.interaction_id is None:
                 raise ValueError("new action buttons require interaction_id")
+            option_ids = [button.option_id for button in new_actions]
+            if len(option_ids) != len(set(option_ids)):
+                raise ValueError("option_id must be unique within an interaction")
         elif self.interaction_id is not None or self.callback_target is not None:
             raise ValueError("interaction fields require new action buttons")
         return self
@@ -136,6 +139,7 @@ class InteractionResult(BaseModel):
     event: Literal["telegram.interaction.selected"] = "telegram.interaction.selected"
     interaction_id: str
     option_id: str
+    option_text: str | None = None
     chat_id: int
     message_id: int
     user_id: int

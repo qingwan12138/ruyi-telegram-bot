@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum
 
 import httpx
 from telegram import CallbackQuery
@@ -21,6 +22,23 @@ logger = logging.getLogger(__name__)
 CALLBACK_ACK_TEXT = "Selection received."
 DELIVERY_SUCCESS_TEXT = "Selection delivered successfully."
 DELIVERY_FAILURE_TEXT = "Failed to deliver your selection."
+DELIVERY_UNKNOWN_TEXT = "Could not confirm delivery of your selection."
+ALREADY_RESOLVED_TEXT = "This interaction has already been resolved."
+
+
+class DeliveryOutcome(str, Enum):
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+    ALREADY_RESOLVED = "already_resolved"
+
+
+DELIVERY_FEEDBACK_TEXT = {
+    DeliveryOutcome.DELIVERED: DELIVERY_SUCCESS_TEXT,
+    DeliveryOutcome.FAILED: DELIVERY_FAILURE_TEXT,
+    DeliveryOutcome.UNKNOWN: DELIVERY_UNKNOWN_TEXT,
+    DeliveryOutcome.ALREADY_RESOLVED: ALREADY_RESOLVED_TEXT,
+}
 
 
 class CallbackService:
@@ -75,12 +93,16 @@ class CallbackService:
                     "Malformed interaction callback ignored (%s)",
                     type(exc).__name__,
                 )
-                await self._send_delivery_feedback(chat_id, delivered=False)
+                await self._send_delivery_feedback(
+                    chat_id,
+                    outcome=DeliveryOutcome.FAILED,
+                )
                 return None
             callback_target = decoded.callback_target
             event: CallbackEvent | InteractionResult = InteractionResult(
                 interaction_id=decoded.interaction_id,
                 option_id=decoded.option_id,
+                option_text=self._find_option_text(query, callback_data),
                 **common_fields,
             )
         else:
@@ -93,46 +115,78 @@ class CallbackService:
             event.message_id,
         )
 
-        delivered = await self._deliver(event, callback_target)
-        await self._send_delivery_feedback(chat_id, delivered=delivered)
+        outcome = await self._deliver(event, callback_target)
+        await self._send_delivery_feedback(chat_id, outcome=outcome)
         return event
+
+    @staticmethod
+    def _find_option_text(
+        query: CallbackQuery,
+        callback_data: str,
+    ) -> str | None:
+        """Best-effort recovery of the selected button's display text."""
+        try:
+            message = query.message
+            reply_markup = getattr(message, "reply_markup", None)
+            keyboard = getattr(reply_markup, "inline_keyboard", None)
+            if not keyboard:
+                return None
+            for row in keyboard:
+                for button in row:
+                    if getattr(button, "callback_data", None) == callback_data:
+                        text = getattr(button, "text", None)
+                        return text if isinstance(text, str) else None
+        except Exception:
+            return None
+        return None
 
     async def _deliver(
         self,
         event: CallbackEvent | InteractionResult,
         callback_target: str | None,
-    ) -> bool:
+    ) -> DeliveryOutcome:
         try:
             endpoint = self.settings.resolve_callback_url(callback_target)
             response = await self.http_client.post(
                 endpoint,
                 json=event.model_dump(mode="json"),
             )
+            if response.status_code == 409:
+                logger.info("callback already resolved: event=%s", event.event)
+                return DeliveryOutcome.ALREADY_RESOLVED
             response.raise_for_status()
         except CallbackRouteError as exc:
             logger.error("callback route resolution failed (%s)", type(exc).__name__)
-            return False
+            return DeliveryOutcome.FAILED
         except httpx.HTTPStatusError as exc:
             logger.error(
                 "callback delivery failed: target status=%s",
                 exc.response.status_code,
             )
-            return False
+            return DeliveryOutcome.FAILED
         except httpx.TimeoutException as exc:
             logger.error("callback delivery timed out (%s)", type(exc).__name__)
-            return False
+            return DeliveryOutcome.UNKNOWN
+        except httpx.RequestError as exc:
+            logger.error("callback delivery network uncertain (%s)", type(exc).__name__)
+            return DeliveryOutcome.UNKNOWN
         except httpx.HTTPError as exc:
-            logger.error("callback delivery network error (%s)", type(exc).__name__)
-            return False
+            logger.error("callback delivery HTTP error (%s)", type(exc).__name__)
+            return DeliveryOutcome.FAILED
         except Exception as exc:
             logger.error("callback delivery error (%s)", type(exc).__name__)
-            return False
+            return DeliveryOutcome.FAILED
 
         logger.info("callback delivered: event=%s", event.event)
-        return True
+        return DeliveryOutcome.DELIVERED
 
-    async def _send_delivery_feedback(self, chat_id: int, *, delivered: bool) -> None:
-        text = DELIVERY_SUCCESS_TEXT if delivered else DELIVERY_FAILURE_TEXT
+    async def _send_delivery_feedback(
+        self,
+        chat_id: int,
+        *,
+        outcome: DeliveryOutcome,
+    ) -> None:
+        text = DELIVERY_FEEDBACK_TEXT[outcome]
         try:
             await self.telegram_client.send_message(text, chat_id=chat_id)
         except Exception as exc:

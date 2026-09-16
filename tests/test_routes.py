@@ -172,6 +172,26 @@ def test_new_interaction_without_target_uses_configured_fallback() -> None:
     assert fake.calls[0]["callback_target"] is None
 
 
+def test_duplicate_option_id_is_rejected_before_telegram_send() -> None:
+    fake = FakeTelegramClient()
+    with make_client(fake) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "text": "Choose",
+                "interaction_id": "decision-duplicate",
+                "buttons": [
+                    {"type": "action", "text": "Retry now", "option_id": "retry"},
+                    {"type": "action", "text": "Retry later", "option_id": "retry"},
+                ],
+            },
+        )
+
+    assert response.status_code == 422
+    assert "option_id must be unique within an interaction" in response.text
+    assert fake.calls == []
+
+
 def test_unknown_explicit_target_is_rejected_without_fallback() -> None:
     fake = FakeTelegramClient()
     settings = Settings(

@@ -93,6 +93,36 @@ def test_manual_review_is_an_ordinary_option() -> None:
     assert request.buttons[0].option_id == "manual"
 
 
+def test_option_ids_must_be_unique_within_one_interaction() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="option_id must be unique within an interaction",
+    ):
+        MessageRequest(
+            text="Choose",
+            interaction_id="decision-duplicate",
+            buttons=[
+                Button(type="action", text="Retry now", option_id="retry"),
+                Button(type="action", text="Retry later", option_id="retry"),
+            ],
+        )
+
+
+def test_option_ids_may_repeat_across_interactions() -> None:
+    first = MessageRequest(
+        text="Choose",
+        interaction_id="decision-1",
+        buttons=[Button(type="action", text="Manual", option_id="manual")],
+    )
+    second = MessageRequest(
+        text="Choose",
+        interaction_id="decision-2",
+        buttons=[Button(type="action", text="Manual", option_id="manual")],
+    )
+
+    assert first.buttons[0].option_id == second.buttons[0].option_id == "manual"
+
+
 def test_new_action_request_requires_interaction_id() -> None:
     with pytest.raises(ValidationError, match="interaction_id"):
         MessageRequest(
