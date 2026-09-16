@@ -1,9 +1,17 @@
-[tool.poetry]
-name = "ruyi-telegram-bot-python"
+[project]
+name = "ruyi-telegram-bot"
 version = "0.1.0"
 description = "Independent Telegram notification and human-interaction service for RuyiSDK automation."
-authors = ["RuyiSDK Contributors"]
+authors = [{ name = "RuyiSDK Contributors" }]
+license = "Apache-2.0"
 readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dynamic = ["dependencies"]
+
+[project.scripts]
+ruyi-telegram-bot = "telegram_bot.__main__:main"
+
+[tool.poetry]
 packages = [{ include = "telegram_bot" }]
 
 [tool.poetry.dependencies]
@@ -18,9 +26,6 @@ pydantic = ">=2.7,<3.0"
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0,<10.0"
 pytest-asyncio = ">=0.24,<2.0"
-
-[tool.poetry.scripts]
-ruyi-telegram-bot = "telegram_bot.__main__:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

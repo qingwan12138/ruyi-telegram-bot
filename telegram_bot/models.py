@@ -19,6 +19,7 @@ class Button(BaseModel):
     type: Literal["url", "action"]
     text: str = Field(min_length=1)
     url: str | None = None
+    option_id: str | None = None
     action: str | None = None
 
     @field_validator("text")
@@ -29,6 +30,16 @@ class Button(BaseModel):
             raise ValueError("button text must not be blank")
         return value
 
+    @field_validator("option_id", "action")
+    @classmethod
+    def strip_identifier(cls, value: str | None, info) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{info.field_name} must not be blank")
+        return stripped
+
     @model_validator(mode="after")
     def validate_target(self) -> "Button":
         if self.type == "url":
@@ -36,17 +47,23 @@ class Button(BaseModel):
                 raise ValueError("url button requires url")
             if self.action is not None:
                 raise ValueError("url button must not include action")
+            if self.option_id is not None:
+                raise ValueError("url button must not include option_id")
             parsed = urlparse(self.url)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise ValueError("url button only supports http:// or https:// URLs")
         else:
-            if not self.action or not self.action.strip():
-                raise ValueError("action button requires action")
             if self.url is not None:
                 raise ValueError("action button must not include url")
-            self.action = self.action.strip()
-            if len(self.action.encode("utf-8")) > 64:
-                raise ValueError("action must be at most 64 UTF-8 bytes")
+            if self.option_id is None and self.action is None:
+                raise ValueError("action button requires option_id or action")
+            if self.option_id is not None and self.action is not None:
+                raise ValueError("action button must not include both option_id and action")
+            if self.action is not None:
+                if self.action.startswith("h1|"):
+                    raise ValueError("legacy action must not use reserved prefix h1|")
+                if len(self.action.encode("utf-8")) > 64:
+                    raise ValueError("action must be at most 64 UTF-8 bytes")
         return self
 
 
@@ -55,6 +72,8 @@ class MessageRequest(BaseModel):
 
     text: str = Field(min_length=1, max_length=4096)
     chat_id: int | None = None
+    interaction_id: str | None = None
+    callback_target: str | None = None
     buttons: list[Button] = Field(default_factory=list)
 
     @field_validator("text")
@@ -64,6 +83,37 @@ class MessageRequest(BaseModel):
         if not value:
             raise ValueError("text must not be blank")
         return value
+
+    @field_validator("interaction_id", "callback_target")
+    @classmethod
+    def strip_interaction_field(cls, value: str | None, info) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{info.field_name} must not be blank")
+        return stripped
+
+    @model_validator(mode="after")
+    def validate_interaction_mode(self) -> "MessageRequest":
+        new_actions = [
+            button
+            for button in self.buttons
+            if button.type == "action" and button.option_id is not None
+        ]
+        legacy_actions = [
+            button
+            for button in self.buttons
+            if button.type == "action" and button.action is not None
+        ]
+        if new_actions and legacy_actions:
+            raise ValueError("request must not mix new and legacy action buttons")
+        if new_actions:
+            if self.interaction_id is None:
+                raise ValueError("new action buttons require interaction_id")
+        elif self.interaction_id is not None or self.callback_target is not None:
+            raise ValueError("interaction fields require new action buttons")
+        return self
 
 
 class MessageResponse(BaseModel):
@@ -75,6 +125,17 @@ class MessageResponse(BaseModel):
 class CallbackEvent(BaseModel):
     event: Literal["telegram.action"] = "telegram.action"
     action: str
+    chat_id: int
+    message_id: int
+    user_id: int
+    username: str | None = None
+    callback_query_id: str
+
+
+class InteractionResult(BaseModel):
+    event: Literal["telegram.interaction.selected"] = "telegram.interaction.selected"
+    interaction_id: str
+    option_id: str
     chat_id: int
     message_id: int
     user_id: int

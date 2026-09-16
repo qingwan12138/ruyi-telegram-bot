@@ -15,8 +15,24 @@ class FakeTelegramClient:
     def __post_init__(self) -> None:
         self.calls: list[dict] = []
 
-    async def send_message(self, text, *, chat_id=None, buttons=()):
-        self.calls.append({"text": text, "chat_id": chat_id, "buttons": list(buttons)})
+    async def send_message(
+        self,
+        text,
+        *,
+        chat_id=None,
+        buttons=(),
+        interaction_id=None,
+        callback_target=None,
+    ):
+        self.calls.append(
+            {
+                "text": text,
+                "chat_id": chat_id,
+                "buttons": list(buttons),
+                "interaction_id": interaction_id,
+                "callback_target": callback_target,
+            }
+        )
         if self.error:
             raise self.error
         return SendResult(
@@ -25,9 +41,17 @@ class FakeTelegramClient:
         )
 
 
-def make_client(fake: FakeTelegramClient) -> TestClient:
+def make_client(
+    fake: FakeTelegramClient,
+    settings: Settings | None = None,
+) -> TestClient:
     app = create_app(
-        settings=Settings(telegram_token="test-token", telegram_chat_id=100),
+        settings=settings
+        or Settings(
+            telegram_token="test-token",
+            telegram_chat_id=100,
+            callback_forward_url="http://fallback.local/callback",
+        ),
         telegram_client=fake,
         enable_lifespan=False,
     )
@@ -103,6 +127,136 @@ def test_action_button_reaches_telegram_client() -> None:
     button = fake.calls[0]["buttons"][0]
     assert button.type == "action"
     assert button.action == "task:solution_a"
+
+
+def test_known_interaction_target_reaches_telegram_client() -> None:
+    fake = FakeTelegramClient()
+    settings = Settings(
+        telegram_token="test-token",
+        telegram_chat_id=100,
+        callback_targets={"target-a": "http://a.local/callback"},
+    )
+    with make_client(fake, settings) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "text": "Choose",
+                "interaction_id": "decision-1",
+                "callback_target": "target-a",
+                "buttons": [
+                    {"type": "action", "text": "Retry", "option_id": "retry"}
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    assert fake.calls[0]["interaction_id"] == "decision-1"
+    assert fake.calls[0]["callback_target"] == "target-a"
+
+
+def test_new_interaction_without_target_uses_configured_fallback() -> None:
+    fake = FakeTelegramClient()
+    with make_client(fake) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "text": "Choose",
+                "interaction_id": "decision-2",
+                "buttons": [
+                    {"type": "action", "text": "Manual", "option_id": "manual"}
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    assert fake.calls[0]["callback_target"] is None
+
+
+def test_unknown_explicit_target_is_rejected_without_fallback() -> None:
+    fake = FakeTelegramClient()
+    settings = Settings(
+        telegram_token="test-token",
+        telegram_chat_id=100,
+        callback_forward_url="http://fallback.local/callback",
+        callback_targets={"known": "http://known.local/callback"},
+    )
+    with make_client(fake, settings) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "text": "Choose",
+                "interaction_id": "decision-3",
+                "callback_target": "missing",
+                "buttons": [
+                    {"type": "action", "text": "Retry", "option_id": "retry"}
+                ],
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "unknown callback target: missing"}
+    assert fake.calls == []
+
+
+def test_action_button_without_any_delivery_route_is_rejected() -> None:
+    settings = Settings(telegram_token="test-token", telegram_chat_id=100)
+    for payload in (
+        {
+            "text": "New",
+            "interaction_id": "decision-4",
+            "buttons": [{"type": "action", "text": "Retry", "option_id": "retry"}],
+        },
+        {
+            "text": "Legacy",
+            "buttons": [{"type": "action", "text": "Old", "action": "task:old"}],
+        },
+    ):
+        fake = FakeTelegramClient()
+        with make_client(fake, settings) as client:
+            response = client.post("/api/v1/messages", json=payload)
+        assert response.status_code == 422
+        assert response.json() == {
+            "detail": "action buttons require a callback delivery route"
+        }
+        assert fake.calls == []
+
+
+def test_caller_cannot_submit_arbitrary_callback_url() -> None:
+    fake = FakeTelegramClient()
+    with make_client(fake) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "text": "Choose",
+                "interaction_id": "decision-5",
+                "callback_url": "http://attacker.local/callback",
+                "buttons": [
+                    {"type": "action", "text": "Retry", "option_id": "retry"}
+                ],
+            },
+        )
+
+    assert response.status_code == 422
+    assert fake.calls == []
+
+
+def test_interaction_callback_data_over_limit_is_rejected_before_send() -> None:
+    fake = FakeTelegramClient()
+    with make_client(fake) as client:
+        response = client.post(
+            "/api/v1/messages",
+            json={
+                "text": "Choose",
+                "interaction_id": "i",
+                "buttons": [
+                    {"type": "action", "text": "Too long", "option_id": "o" * 57}
+                ],
+            },
+        )
+
+    assert response.status_code == 422
+    assert "64 UTF-8 bytes" in response.json()["detail"]
+    assert fake.calls == []
 
 
 def test_missing_chat_id_error_maps_to_422() -> None:
