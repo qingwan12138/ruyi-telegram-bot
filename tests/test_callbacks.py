@@ -7,7 +7,7 @@ import pytest
 from telegram_bot.callback_data import encode_interaction_callback
 from telegram_bot.callback_service import CallbackService, DeliveryOutcome
 from telegram_bot.config import Settings
-from telegram_bot.models import InteractionResult
+from telegram_bot.models import CallbackEvent, InteractionResult
 
 
 class FakeTelegramClient:
@@ -63,10 +63,20 @@ async def run_service(settings, telegram, receiver, query=None):
         await http_client.aclose()
 
 
-async def run_delivery(settings, receiver, *, target="target-a"):
-    http_client = httpx.AsyncClient(transport=httpx.MockTransport(receiver))
+async def run_delivery(
+    settings,
+    receiver,
+    *,
+    target="target-a",
+    event=None,
+    follow_redirects=False,
+):
+    http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(receiver),
+        follow_redirects=follow_redirects,
+    )
     service = CallbackService(settings, FakeTelegramClient(), http_client)
-    event = InteractionResult(
+    event = event or InteractionResult(
         interaction_id="decision-789",
         option_id="option-2",
         chat_id=123456789,
@@ -357,6 +367,25 @@ async def test_http_409_sends_already_resolved_feedback() -> None:
 
 
 @pytest.mark.asyncio
+async def test_legacy_http_409_is_failed_with_failure_feedback() -> None:
+    async def receiver(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(409)
+
+    telegram = FakeTelegramClient()
+    event = await run_service(
+        Settings(callback_forward_url="http://fallback.local/callback"),
+        telegram,
+        receiver,
+        make_query(),
+    )
+
+    assert isinstance(event, CallbackEvent)
+    assert telegram.sent == [
+        {"text": "Failed to deliver your selection.", "chat_id": 123456789}
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status_code", "expected"),
     [
@@ -378,6 +407,52 @@ async def test_delivery_http_status_outcomes(status_code, expected) -> None:
     )
 
     assert outcome is expected
+
+
+@pytest.mark.asyncio
+async def test_legacy_http_409_outcome_is_failed() -> None:
+    async def receiver(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(409)
+
+    legacy_event = CallbackEvent(
+        action="task123:solution_a",
+        chat_id=123456789,
+        message_id=456,
+        user_id=789,
+        callback_query_id="callback-1",
+    )
+    outcome = await run_delivery(
+        Settings(callback_forward_url="http://fallback.local/callback"),
+        receiver,
+        target=None,
+        event=legacy_event,
+    )
+
+    assert outcome is DeliveryOutcome.FAILED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [302, 307])
+async def test_redirect_is_failed_without_following_location(status_code: int) -> None:
+    requested_hosts: list[str] = []
+
+    async def receiver(request: httpx.Request) -> httpx.Response:
+        requested_hosts.append(request.url.host)
+        if request.url.host == "a.local":
+            return httpx.Response(
+                status_code,
+                headers={"Location": "http://redirected.local/callback"},
+            )
+        return httpx.Response(204)
+
+    outcome = await run_delivery(
+        Settings(callback_targets={"target-a": "http://a.local/callback"}),
+        receiver,
+        follow_redirects=True,
+    )
+
+    assert outcome is DeliveryOutcome.FAILED
+    assert requested_hosts == ["a.local"]
 
 
 @pytest.mark.asyncio

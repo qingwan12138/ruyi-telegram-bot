@@ -273,18 +273,21 @@ Long polling is used; no public Telegram webhook is required.
    `Selection received.`
 2. Result accepted by the target HTTP endpoint: the user receives
    `Selection delivered successfully.`
-3. Target returns HTTP 409: the user receives
+3. Target returns HTTP 409 for a new `InteractionResult`: the user receives
    `This interaction has already been resolved.`
-4. Unknown target, malformed data, other 4xx, or 5xx: the user receives
+4. Unknown target, malformed data, or any other non-2xx HTTP response: the user
+   receives
    `Failed to deliver your selection.`
 5. Timeout, connection error, reset, or other network uncertainty: the user
    receives `Could not confirm delivery of your selection.`
 
-The delivery outcomes are therefore: 2xx = delivered, 409 = already resolved,
-other explicit 4xx/5xx and route resolution failures = failed, and timeout or
-network uncertainty = unknown. Unknown does not mean the target definitely did
-not receive the request: delivery may have completed before the response was
-lost.
+The delivery outcomes are therefore: 2xx = delivered; 409 = already resolved
+only for the new `InteractionResult` contract; any other non-2xx HTTP response
+and route resolution failures = failed; timeout or network uncertainty =
+unknown. For legacy `telegram.action`, HTTP 409 is failed because that event has
+no `interaction_id`. Redirect responses such as 301, 302, 307, and 308 are not
+followed and are failed. Unknown does not mean the target definitely did not
+receive the request: delivery may have completed before the response was lost.
 
 “Received” means Telegram delivered the click to this service. “Delivered”
 means the target workflow accepted the HTTP result. Neither message means the

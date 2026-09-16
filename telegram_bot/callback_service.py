@@ -150,8 +150,9 @@ class CallbackService:
             response = await self.http_client.post(
                 endpoint,
                 json=event.model_dump(mode="json"),
+                follow_redirects=False,
             )
-            if response.status_code == 409:
+            if response.status_code == 409 and isinstance(event, InteractionResult):
                 logger.info("callback already resolved: event=%s", event.event)
                 return DeliveryOutcome.ALREADY_RESOLVED
             response.raise_for_status()
