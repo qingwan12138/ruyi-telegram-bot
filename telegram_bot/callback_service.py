@@ -13,6 +13,8 @@ from .telegram_client import TelegramClient
 
 logger = logging.getLogger(__name__)
 
+CALLBACK_ACK_TEXT = "Selection received."
+
 
 class CallbackService:
     def __init__(
@@ -28,7 +30,10 @@ class CallbackService:
     async def handle(self, query: CallbackQuery) -> CallbackEvent | None:
         """Acknowledge a callback, build a generic event, and optionally forward it."""
         try:
-            await self.telegram_client.answer_callback_query(query.id)
+            await self.telegram_client.answer_callback_query(
+                query.id,
+                text=CALLBACK_ACK_TEXT,
+            )
         except Exception as exc:
             logger.error(
                 "Failed to answer Telegram callback query id=%s (%s)",

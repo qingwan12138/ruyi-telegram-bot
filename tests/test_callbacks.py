@@ -9,12 +9,27 @@ from telegram_bot.config import Settings
 
 
 class FakeTelegramClient:
-    def __init__(self, *, answer_error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        answer_error: Exception | None = None,
+        trace: list[str] | None = None,
+    ) -> None:
         self.answered: list[str] = []
+        self.answer_texts: list[str | None] = []
         self.answer_error = answer_error
+        self.trace = trace
 
-    async def answer_callback_query(self, callback_query_id: str) -> None:
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        *,
+        text: str | None = None,
+    ) -> None:
         self.answered.append(callback_query_id)
+        self.answer_texts.append(text)
+        if self.trace is not None:
+            self.trace.append("acknowledge")
         if self.answer_error:
             raise self.answer_error
 
@@ -36,6 +51,7 @@ async def test_callback_is_answered_and_parsed_without_forward_url() -> None:
         event = await service.handle(make_query())
 
     assert telegram.answered == ["callback-1"]
+    assert telegram.answer_texts == ["Selection received."]
     assert event is not None
     assert event.event == "telegram.action"
     assert event.action == "task123:solution_a"
@@ -44,6 +60,59 @@ async def test_callback_is_answered_and_parsed_without_forward_url() -> None:
     assert event.user_id == 789
     assert event.username == "example"
     assert event.callback_query_id == "callback-1"
+
+
+@pytest.mark.asyncio
+async def test_callback_is_acknowledged_before_forwarding() -> None:
+    trace: list[str] = []
+
+    async def receiver(request: httpx.Request) -> httpx.Response:
+        trace.append("forward")
+        return httpx.Response(204)
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(receiver))
+    service = CallbackService(
+        Settings(callback_forward_url="http://upstream.local/callback"),
+        FakeTelegramClient(trace=trace),
+        http_client,
+    )
+
+    try:
+        await service.handle(make_query())
+    finally:
+        await http_client.aclose()
+
+    assert trace == ["acknowledge", "forward"]
+
+
+@pytest.mark.asyncio
+async def test_incomplete_callback_is_acknowledged_but_not_forwarded() -> None:
+    forwarded = False
+
+    async def receiver(request: httpx.Request) -> httpx.Response:
+        nonlocal forwarded
+        forwarded = True
+        return httpx.Response(204)
+
+    query = make_query()
+    query.message = None
+    telegram = FakeTelegramClient()
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(receiver))
+    service = CallbackService(
+        Settings(callback_forward_url="http://upstream.local/callback"),
+        telegram,
+        http_client,
+    )
+
+    try:
+        event = await service.handle(query)
+    finally:
+        await http_client.aclose()
+
+    assert event is None
+    assert telegram.answered == ["callback-1"]
+    assert telegram.answer_texts == ["Selection received."]
+    assert forwarded is False
 
 
 @pytest.mark.asyncio
