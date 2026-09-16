@@ -199,6 +199,8 @@ legacy `action` fields.
 
 New action options require `interaction_id` and use `option_id`. The option
 count is dynamic; “Manual review” is just another option with no special logic.
+Each `option_id` must be unique within one interaction, but it does not need to
+be globally unique and may be reused by another `MessageRequest`.
 
 ```json
 {
@@ -227,6 +229,7 @@ Example result delivered to the configured consuming workflow:
   "event": "telegram.interaction.selected",
   "interaction_id": "decision-789",
   "option_id": "manual",
+  "option_text": "Manual review",
   "chat_id": 123456789,
   "message_id": 456,
   "user_id": 789,
@@ -235,9 +238,13 @@ Example result delivered to the configured consuming workflow:
 }
 ```
 
-The Telegram service transports only the interaction ID, option ID, logical
-routing key, and Telegram metadata. It never tries to understand what `manual`
-or another option means.
+`interaction_id + option_id` is the stable machine protocol. `option_text` is
+optional, best-effort display metadata recovered from the Telegram message's
+inline keyboard; it may be `null`. Consumers must not use natural-language
+`option_text` as the machine action key. The Telegram service never stores the
+full AI, test, package, or PR context and never tries to understand what
+`manual` or another option means. The consuming workflow stores and restores
+that business context using `interaction_id`.
 
 ## Callback data protocol
 
@@ -250,6 +257,8 @@ h1|<target-character-count>|<interaction-character-count>|<target><interaction><
 Length prefixes are Unicode character counts. The complete encoded value is
 limited separately to 64 UTF-8 bytes, including the prefix and lengths. A new
 interaction using `CALLBACK_FORWARD_URL` encodes a target length of zero.
+The 64-byte limit applies only to Telegram `callback_data`, not to the callback
+HTTP JSON body; `option_text` is never added to `callback_data`.
 
 The decoder safely rejects malformed prefixes, lengths, bounds, empty
 interaction/option IDs, and payloads over the byte limit. `h1|` is reserved;
@@ -264,8 +273,18 @@ Long polling is used; no public Telegram webhook is required.
    `Selection received.`
 2. Result accepted by the target HTTP endpoint: the user receives
    `Selection delivered successfully.`
-3. Unknown target, malformed data, timeout, network error, 4xx, or 5xx: the user
-   receives `Failed to deliver your selection.`
+3. Target returns HTTP 409: the user receives
+   `This interaction has already been resolved.`
+4. Unknown target, malformed data, other 4xx, or 5xx: the user receives
+   `Failed to deliver your selection.`
+5. Timeout, connection error, reset, or other network uncertainty: the user
+   receives `Could not confirm delivery of your selection.`
+
+The delivery outcomes are therefore: 2xx = delivered, 409 = already resolved,
+other explicit 4xx/5xx and route resolution failures = failed, and timeout or
+network uncertainty = unknown. Unknown does not mean the target definitely did
+not receive the request: delivery may have completed before the response was
+lost.
 
 “Received” means Telegram delivered the click to this service. “Delivered”
 means the target workflow accepted the HTTP result. Neither message means the
@@ -274,7 +293,23 @@ After real business completion, that workflow may call
 `POST /api/v1/messages` again with its own result message.
 
 Acknowledgement, forwarding, and feedback-send failures are isolated so the
-polling loop continues. There is intentionally no durable retry queue.
+polling loop continues. The service does not automatically retry an unknown
+delivery because doing so could repeat a business side effect. There is
+intentionally no durable retry queue.
+
+### Consumer idempotency contract
+
+Consuming workflows MUST provide business-level idempotency using
+`interaction_id` as the idempotency key. A workflow should normally accept only
+one final human decision for each interaction: the first valid selection moves
+the interaction from pending to resolved, and later selections for that
+interaction return HTTP 409. `callback_query_id` is transport metadata, not the
+business idempotency key.
+
+The Telegram Bot does not persist resolved interactions or perform business
+deduplication. It has no database, Redis/Valkey state, in-memory resolved map,
+or business state machine; those responsibilities remain with the consuming
+workflow.
 
 ## Legacy action compatibility
 
