@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from telegram_bot.config import Settings
+from telegram_bot.callback_data import decode_interaction_callback
 from telegram_bot.telegram_client import MissingChatIdError, TelegramClient
 
 
@@ -81,6 +82,37 @@ def test_keyboard_uses_at_most_two_buttons_per_row() -> None:
 
     assert keyboard is not None
     assert [len(row) for row in keyboard.inline_keyboard] == [2, 2, 1]
+
+
+def test_build_keyboard_encodes_new_interaction_button() -> None:
+    from telegram_bot.models import Button
+
+    keyboard = TelegramClient.build_keyboard(
+        [Button(type="action", text="Retry", option_id="retry")],
+        interaction_id="decision-1",
+        callback_target="target-a",
+    )
+
+    assert keyboard is not None
+    decoded = decode_interaction_callback(keyboard.inline_keyboard[0][0].callback_data)
+    assert decoded.callback_target == "target-a"
+    assert decoded.interaction_id == "decision-1"
+    assert decoded.option_id == "retry"
+
+
+def test_build_keyboard_encodes_empty_target_for_new_fallback() -> None:
+    from telegram_bot.models import Button
+
+    keyboard = TelegramClient.build_keyboard(
+        [Button(type="action", text="Manual", option_id="manual")],
+        interaction_id="decision-2",
+        callback_target=None,
+    )
+
+    assert keyboard is not None
+    callback_data = keyboard.inline_keyboard[0][0].callback_data
+    assert callback_data.startswith("h1|0|")
+    assert decode_interaction_callback(callback_data).callback_target is None
 
 
 @pytest.mark.asyncio

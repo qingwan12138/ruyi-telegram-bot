@@ -11,6 +11,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 from telegram.request import HTTPXRequest
 
+from .callback_data import encode_interaction_callback
 from .config import Settings
 from .models import Button
 
@@ -121,7 +122,12 @@ class TelegramClient:
                 await asyncio.sleep(2)
 
     @staticmethod
-    def build_keyboard(buttons: Sequence[Button]) -> InlineKeyboardMarkup | None:
+    def build_keyboard(
+        buttons: Sequence[Button],
+        *,
+        interaction_id: str | None = None,
+        callback_target: str | None = None,
+    ) -> InlineKeyboardMarkup | None:
         if not buttons:
             return None
 
@@ -130,8 +136,18 @@ class TelegramClient:
             if button.type == "url":
                 rendered.append(InlineKeyboardButton(text=button.text, url=button.url))
             else:
+                if button.option_id is not None:
+                    if interaction_id is None:
+                        raise ValueError("interaction_id is required for option buttons")
+                    callback_data = encode_interaction_callback(
+                        callback_target,
+                        interaction_id,
+                        button.option_id,
+                    )
+                else:
+                    callback_data = button.action
                 rendered.append(
-                    InlineKeyboardButton(text=button.text, callback_data=button.action)
+                    InlineKeyboardButton(text=button.text, callback_data=callback_data)
                 )
 
         rows = [rendered[index : index + 2] for index in range(0, len(rendered), 2)]
@@ -151,9 +167,15 @@ class TelegramClient:
         *,
         chat_id: int | None = None,
         buttons: Sequence[Button] = (),
+        interaction_id: str | None = None,
+        callback_target: str | None = None,
     ) -> SendResult:
         target_chat_id = self.resolve_chat_id(chat_id)
-        keyboard = self.build_keyboard(buttons)
+        keyboard = self.build_keyboard(
+            buttons,
+            interaction_id=interaction_id,
+            callback_target=callback_target,
+        )
 
         try:
             message = await self.bot.send_message(
