@@ -60,6 +60,7 @@
               <fieldset class="field-group choice-group"><legend>Chat</legend><label class="choice"><input type="radio" name="message-chat-mode" value="default" checked><span>Use configured default</span></label><label class="choice"><input type="radio" name="message-chat-mode" value="override"><span>Override chat ID</span></label></fieldset>
               <div class="field-group" id="message-chat-override" hidden><label for="message-chat-id">Chat ID</label><input id="message-chat-id" type="text" inputmode="numeric" placeholder="-1001234567890"></div>
               <div class="builder-heading"><div><h2>URL Buttons</h2><p>Optional HTTP(S) links, rendered two per Telegram row.</p></div><button class="button button-secondary button-small" id="add-url-button" type="button">Add URL Button</button></div>
+              <div class="form-error" id="message-validation" role="alert" hidden></div>
               <div class="builder-list" id="url-button-list"></div><div class="empty-builder" id="url-button-empty">No URL buttons added.</div>
               <div class="form-actions"><button class="button button-primary" id="send-message-button" type="submit">Send Message</button></div>
             </form>

@@ -16,7 +16,7 @@ console_router = APIRouter()
 
 
 def sanitize_endpoint_for_display(endpoint: str) -> str:
-    """Return a routable-looking endpoint with every credential channel removed."""
+    """Return only the endpoint origin, with every credential channel removed."""
     parsed = urlsplit(endpoint)
     hostname = parsed.hostname or ""
     display_host = f"[{hostname}]" if ":" in hostname else hostname
@@ -29,7 +29,7 @@ def sanitize_endpoint_for_display(endpoint: str) -> str:
         or (parsed.scheme == "https" and port == 443)
     ):
         display_host = f"{display_host}:{port}"
-    return urlunsplit((parsed.scheme, display_host, parsed.path, "", ""))
+    return urlunsplit((parsed.scheme, display_host, "", "", ""))
 
 
 def _polling_status(request: Request) -> str:

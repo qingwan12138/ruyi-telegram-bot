@@ -312,6 +312,9 @@ function updateMessageView() {
   setText("message-count", `${byId("message-text").value.length} / 4096`);
   jsonPreview("message-preview", buildMessagePayload());
   const errors = validateMessage();
+  const validation = byId("message-validation");
+  validation.hidden = errors.length === 0;
+  validation.textContent = errors[0] || "";
   byId("send-message-button").disabled = errors.length > 0;
 }
 
