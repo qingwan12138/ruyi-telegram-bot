@@ -144,6 +144,32 @@ curl http://127.0.0.1:9878/version
 {"version":"0.1.0"}
 ```
 
+## Web Console
+
+Start the service normally:
+
+```bash
+poetry run python -m telegram_bot
+```
+
+Then open [http://127.0.0.1:9878/console](http://127.0.0.1:9878/console).
+The Console is intended for local or internal development, integration testing,
+and demonstrations. It provides five desktop-focused views:
+
+- **Overview** summarizes configuration and runtime readiness;
+- **Send Message** builds plain notifications and URL buttons;
+- **Interaction** builds decision requests and previews the stateless callback
+  data byte budget;
+- **Routing** shows secret-sanitized callback targets as read-only data;
+- **About** documents the service's API and architecture boundary.
+
+Both message builders call the existing `POST /api/v1/messages` endpoint; the
+Console does not duplicate Telegram delivery or callback-routing logic. Runtime
+configuration is read-only, secrets are not exposed, and no persistent
+interaction history is stored. The status payload is available at
+`GET /api/v1/console/status` and reports configuration booleans rather than
+token, chat ID, or proxy values.
+
 ## Message API
 
 ### Plain text

@@ -8,8 +8,10 @@ from contextlib import asynccontextmanager, suppress
 
 import httpx
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from .callback_service import CallbackService
+from .console_routes import WEB_DIRECTORY, console_router
 from .config import Settings
 from .routes import router
 from .telegram_client import TelegramClient
@@ -38,6 +40,7 @@ def create_app(
         try:
             await client.initialize()
             client_initialized = True
+            app.state.telegram_client_initialized = True
             callback_service = CallbackService(app_settings, client, forwarding_client)
             app.state.telegram_client = client
             app.state.callback_service = callback_service
@@ -45,6 +48,7 @@ def create_app(
                 client.poll_callbacks(callback_service.handle),
                 name="telegram-callback-poller",
             )
+            app.state.polling_task = polling_task
             logger.info(
                 "service started: listen=%s:%s",
                 app_settings.app_host,
@@ -60,6 +64,7 @@ def create_app(
                 await forwarding_client.aclose()
             if client_initialized:
                 await client.shutdown()
+            app.state.telegram_client_initialized = False
 
     app = FastAPI(
         title="Ruyi Telegram Bot",
@@ -67,9 +72,17 @@ def create_app(
         lifespan=lifespan if enable_lifespan else None,
     )
     app.state.settings = app_settings
+    app.state.polling_task = None
+    app.state.telegram_client_initialized = False
     if telegram_client is not None:
         app.state.telegram_client = telegram_client
     app.include_router(router)
+    app.include_router(console_router)
+    app.mount(
+        "/console/assets",
+        StaticFiles(directory=WEB_DIRECTORY),
+        name="console-assets",
+    )
     return app
 
 

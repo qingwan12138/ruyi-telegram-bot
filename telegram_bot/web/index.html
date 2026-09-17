@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Ruyi Telegram Bot Console</title>
+    <link rel="stylesheet" href="/console/assets/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Console navigation">
+        <a class="brand" href="#overview" data-navigate="overview" aria-label="Ruyi Telegram Bot Console overview">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 3 3.9 9.6c-1.16.45-1.14 1.12-.2 1.41l4.39 1.37 1.68 5.13c.2.56.1.79.68.79.45 0 .65-.2.9-.44l2.13-2.07 4.43 3.28c.82.45 1.41.22 1.62-.76L22.4 4.78C22.7 3.55 21.93 3 21 3Zm-11.6 9.07 8.58-5.42c.43-.26.82-.12.5.16l-7.08 6.39-.28 3.01-1.72-4.14Z"/></svg></span>
+          <span><strong>Ruyi Telegram Bot</strong><small>Developer Console</small></span>
+        </a>
+        <nav class="nav-list">
+          <button class="nav-item is-active" type="button" data-page="overview" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>Overview</button>
+          <button class="nav-item" type="button" data-page="send-message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-8.3 18-2.3-7.4L3 11.3 21 3Zm-9.4 8.9 1.4 4.5 4.6-10-10 4.6 4 1.2 5-3.5-5 3.2Z"/></svg>Send Message</button>
+          <button class="nav-item" type="button" data-page="interaction"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7l-4 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm2 5v2h2V9H7Zm4 0v2h2V9h-2Zm4 0v2h2V9h-2Z"/></svg>Interaction</button>
+          <button class="nav-item" type="button" data-page="routing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3a3 3 0 1 1-1 5.83v6.34A3 3 0 1 1 7 15.17V13h10v2.17a3 3 0 1 1 2 0V12a1 1 0 0 0-1-1h-5V8.83a3 3 0 1 1-2 0V11H7V8.83A3 3 0 0 1 6 3Z"/></svg>Routing</button>
+          <button class="nav-item" type="button" data-page="about"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 10h2v7h-2v-7Zm0-3h2v2h-2V7Zm1-5a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Z"/></svg>About</button>
+        </nav>
+        <div class="sidebar-footer">
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><span aria-hidden="true">◐</span> Theme</button>
+          <div class="environment-status"><span class="environment-dot" aria-hidden="true"></span><span>Local service</span><code id="sidebar-version">v—</code></div>
+        </div>
+      </aside>
+
+      <main class="main-content" id="main-content">
+        <div class="topbar"><span class="service-indicator" id="global-service-indicator"><span></span>Checking service</span></div>
+
+        <section class="page is-active" data-page-panel="overview" aria-labelledby="overview-title">
+          <header class="page-header"><div><h1 id="overview-title">Overview</h1><p>Monitor runtime readiness and start a debugging workflow.</p></div><button class="button button-secondary" id="refresh-status" type="button">Refresh status</button></header>
+          <div class="status-grid" aria-label="Service status overview">
+            <article class="status-card"><div class="status-icon icon-blue" aria-hidden="true">API</div><div><span class="card-label">API</span><strong id="status-api">Checking</strong><small>HTTP service</small></div></article>
+            <article class="status-card"><div class="status-icon icon-green" aria-hidden="true">↻</div><div><span class="card-label">Polling</span><strong id="status-polling">Checking</strong><small>Long polling runtime</small></div></article>
+            <article class="status-card"><div class="status-icon icon-violet" aria-hidden="true">⌘</div><div><span class="card-label">Callback Targets</span><strong id="status-targets">—</strong><small id="status-fallback">Loading routing</small></div></article>
+            <article class="status-card"><div class="status-icon icon-cyan" aria-hidden="true">➤</div><div><span class="card-label">Telegram</span><strong id="status-telegram">Checking</strong><small id="status-chat">Loading configuration</small></div></article>
+          </div>
+          <section class="panel quick-actions"><div class="section-heading"><h2>Quick Actions</h2><p>Common developer tasks to validate and explore the bot.</p></div><div class="action-row"><button class="button button-primary" type="button" data-navigate="send-message">Send Test Message</button><button class="button button-secondary" type="button" data-navigate="interaction">Create Interaction</button><button class="button button-secondary" type="button" data-navigate="routing">View Routing</button></div></section>
+          <section class="panel contract-panel">
+            <div class="section-heading"><h2>Human Interaction Contract</h2><p>Stable identifiers and transport outcomes at a glance.</p></div>
+            <div class="protocol-line"><code>interaction_id</code><span>+</span><code>option_id</code><span class="divider"></span><strong>Stable machine protocol</strong></div>
+            <div class="contract-table" role="table" aria-label="Delivery outcome contract">
+              <div class="contract-row contract-header" role="row"><span>Response</span><span>Outcome</span><span>Meaning</span></div>
+              <div class="contract-row" role="row"><span><b class="badge badge-success">2xx</b></span><strong>Delivered</strong><span>Target explicitly accepted the callback.</span></div>
+              <div class="contract-row" role="row"><span><b class="badge badge-resolved">409</b></span><strong>Already Resolved</strong><span>Only for the new InteractionResult contract.</span></div>
+              <div class="contract-row" role="row"><span><b class="badge badge-warning">Network</b></span><strong>Unknown</strong><span>Delivery could not be confirmed; no automatic retry.</span></div>
+              <div class="contract-row" role="row"><span><b class="badge badge-danger">Other</b></span><strong>Failed</strong><span>Any other non-2xx response or route failure.</span></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page" data-page-panel="send-message" aria-labelledby="send-title" hidden>
+          <header class="page-header"><div><h1 id="send-title">Send Telegram Message</h1><p>Send a plain notification or attach URL buttons.</p></div></header>
+          <div class="workspace-grid">
+            <form class="panel form-panel" id="message-form" novalidate>
+              <div class="field-group"><div class="label-row"><label for="message-text">Message</label><span id="message-count">0 / 4096</span></div><textarea id="message-text" maxlength="4096" rows="6" placeholder="Build completed successfully." required></textarea><p class="field-help">Text sent directly to Telegram.</p></div>
+              <fieldset class="field-group choice-group"><legend>Chat</legend><label class="choice"><input type="radio" name="message-chat-mode" value="default" checked><span>Use configured default</span></label><label class="choice"><input type="radio" name="message-chat-mode" value="override"><span>Override chat ID</span></label></fieldset>
+              <div class="field-group" id="message-chat-override" hidden><label for="message-chat-id">Chat ID</label><input id="message-chat-id" type="text" inputmode="numeric" placeholder="-1001234567890"></div>
+              <div class="builder-heading"><div><h2>URL Buttons</h2><p>Optional HTTP(S) links, rendered two per Telegram row.</p></div><button class="button button-secondary button-small" id="add-url-button" type="button">Add URL Button</button></div>
+              <div class="builder-list" id="url-button-list"></div><div class="empty-builder" id="url-button-empty">No URL buttons added.</div>
+              <div class="form-actions"><button class="button button-primary" id="send-message-button" type="submit">Send Message</button></div>
+            </form>
+            <aside class="side-stack">
+              <section class="panel preview-panel"><div class="panel-title-row"><h2>Request Preview</h2><button class="text-button" type="button" data-copy="message-preview">Copy JSON</button></div><pre id="message-preview" tabindex="0"></pre></section>
+              <section class="panel result-panel" id="message-result" aria-live="polite"><h2>Delivery Result</h2><div class="result-empty"><strong>Result will appear here.</strong><span>Send a message to see the API response.</span></div></section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="page" data-page-panel="interaction" aria-labelledby="interaction-title" hidden>
+          <header class="page-header"><div><h1 id="interaction-title">Human Interaction Builder</h1><p>Create a Telegram decision request using the current interaction protocol.</p></div></header>
+          <div class="workspace-grid interaction-grid">
+            <form class="panel form-panel" id="interaction-form" novalidate>
+              <div class="field-group"><div class="label-row"><label for="interaction-id">Interaction ID</label><button class="text-button" id="generate-demo-id" type="button">Generate Demo ID</button></div><input id="interaction-id" type="text" placeholder="decision-001" autocomplete="off" required><p class="field-help">Business identifier owned by the consuming workflow.</p></div>
+              <div class="field-group"><label for="callback-target">Callback Target</label><select id="callback-target" required><option value="">Loading targets…</option></select><p class="field-help">Logical destination loaded from runtime configuration.</p></div>
+              <div class="field-group"><div class="label-row"><label for="interaction-message">Message</label><span id="interaction-message-count">0 / 4096</span></div><textarea id="interaction-message" maxlength="4096" rows="4" placeholder="Choose an action." required></textarea></div>
+              <div class="builder-heading"><div><h2>Options</h2><p>Each option ID must be unique inside this interaction.</p></div><button class="button button-secondary button-small" id="add-option" type="button">Add Option</button></div>
+              <div class="form-error" id="interaction-validation" role="alert" hidden></div><div class="builder-list" id="option-list"></div><div class="empty-builder" id="option-empty">Add at least one option to send an interaction.</div>
+              <div class="form-actions"><button class="button button-primary" id="send-interaction-button" type="submit">Send Interaction</button></div>
+            </form>
+            <aside class="side-stack">
+              <section class="panel preview-panel"><div class="panel-title-row"><h2>Request Preview</h2><button class="text-button" type="button" data-copy="interaction-preview">Copy JSON</button></div><pre id="interaction-preview" tabindex="0"></pre></section>
+              <section class="panel budget-panel"><div class="panel-title-row"><h2>Callback Data Budget</h2><span>64 UTF-8 bytes max</span></div><div id="callback-budget" class="budget-list"></div></section>
+              <section class="panel result-panel" id="interaction-result" aria-live="polite"><h2>Delivery Result</h2><div class="result-empty"><strong>Result will appear here.</strong><span>Sending confirms only that Telegram accepted the message.</span></div></section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="page" data-page-panel="routing" aria-labelledby="routing-title" hidden>
+          <header class="page-header"><div><h1 id="routing-title">Callback Routing</h1><p>Read-only runtime configuration with secret-safe endpoint displays.</p></div></header>
+          <div class="summary-strip"><div><span>Logical targets</span><strong id="routing-count">—</strong></div><div><span>Legacy fallback</span><strong id="routing-fallback">—</strong></div><div><span>Configuration</span><strong>Read-only</strong></div></div>
+          <section class="panel routing-panel"><div class="table-wrap"><table><thead><tr><th>Logical Target</th><th>Sanitized Endpoint</th><th>State</th></tr></thead><tbody id="routing-table-body"></tbody></table></div><div class="empty-state" id="routing-empty" hidden><strong>No callback targets configured.</strong><span>New interactions require the legacy fallback or a configured logical target.</span></div></section>
+          <section class="notice-panel"><strong>Configuration is read-only in Console.</strong><span>Edit environment variables and restart the service to change routing.</span></section>
+        </section>
+
+        <section class="page" data-page-panel="about" aria-labelledby="about-title" hidden>
+          <header class="page-header"><div><h1 id="about-title">About</h1><p>Service responsibility, API surface, and architecture boundary.</p></div><a class="button button-primary" href="/docs" target="_blank" rel="noreferrer">Open API Docs</a></header>
+          <div class="about-grid"><section class="panel about-intro"><div class="about-mark" aria-hidden="true">➤</div><div><h2>Ruyi Telegram Bot</h2><p>Notification &amp; Human Interaction Debug Console</p><dl><div><dt>Version</dt><dd id="about-version">—</dd></div><div><dt>Core API</dt><dd><code>POST /api/v1/messages</code></dd></div></dl></div></section><section class="panel responsibility-panel"><h2>Service Responsibility</h2><ul><li>Notification delivery</li><li>Human interaction transport</li><li>Callback routing</li><li>Transport delivery feedback</li></ul><p>AI is a horizontal capability, not a central router.</p></section></div>
+          <section class="panel architecture-panel"><div class="section-heading"><h2>Architecture</h2><p>The Telegram Bot transports decisions without owning workflow business state.</p></div><div class="architecture-flow" aria-label="Workflow to Telegram human interaction flow"><span>Workflow</span><b>→</b><span>Telegram Bot</span><b>→</b><span>Telegram</span><b>→</b><span>Human</span><b>→</b><span>Telegram Bot</span><b>→</b><span>Consuming Workflow</span></div></section>
+          <section class="boundary-list"><div><strong>No business orchestration</strong><span>Test, package, and PR execution remain in their workflows.</span></div><div><strong>No persistent state</strong><span>No callback history, resolved map, database, or retry queue.</span></div><div><strong>No configuration writes</strong><span>Runtime configuration remains environment-managed and read-only.</span></div></section>
+        </section>
+      </main>
+    </div>
+
+    <template id="url-button-template">
+      <article class="builder-item url-button-item"><div class="builder-item-header"><strong class="item-number">URL Button</strong><div class="item-actions"><button type="button" data-move="up" aria-label="Move URL button up">↑</button><button type="button" data-move="down" aria-label="Move URL button down">↓</button><button type="button" data-remove aria-label="Remove URL button">Remove</button></div></div><div class="field-row"><div class="field-group"><label data-label="text">Button Text</label><input type="text" data-field="text" placeholder="View PR"></div><div class="field-group"><label data-label="url">URL</label><input type="url" data-field="url" placeholder="https://example.com/pr/1"></div></div><div class="item-error" role="alert" hidden></div></article>
+    </template>
+    <template id="option-template">
+      <article class="builder-item option-item"><div class="builder-item-header"><strong class="item-number">Option</strong><div class="item-actions"><button type="button" data-move="up" aria-label="Move option up">↑</button><button type="button" data-move="down" aria-label="Move option down">↓</button><button type="button" data-remove aria-label="Remove option">Remove</button></div></div><div class="field-row"><div class="field-group"><label data-label="text">Display Text</label><input type="text" data-field="text" placeholder="Manual review"></div><div class="field-group"><label data-label="option_id">Option ID</label><input type="text" data-field="option_id" placeholder="manual" autocomplete="off"></div></div><div class="item-error" role="alert" hidden></div></article>
+    </template>
+    <script src="/console/assets/app.js" defer></script>
+  </body>
+</html>
