@@ -1,5 +1,7 @@
 # ruyi-telegram-bot
 
+**English** | [简体中文](README.zh-CN.md)
+
 An independent Telegram notification and human-interaction transport split
 from [`ruyisdk-test/riko-bot`](https://github.com/ruyisdk-test/riko-bot).
 
